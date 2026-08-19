@@ -107,28 +107,30 @@ function BuildSpecUtils.create_specs(tree, specs, dotnet_additional_args)
       BuildSpecUtils.create_single_spec(position, proj_root, filter, dotnet_additional_args)
     table.insert(specs, spec)
   elseif position.type == "file" then
+    -- Relying on `is_class`/`framework` tagging to build the filter means a
+    -- file with no tagged class (e.g. tagging didn't match) silently gets
+    -- zero specs, which crashes neotest's runner later expecting one spec
+    -- per requested position. Build the filter from the actual discovered
+    -- test leaf nodes instead, so a file always gets exactly one spec.
     local proj_root = lib.files.match_root_pattern("*.csproj")(position.path)
-    local filter = {}
+    local fqns = {}
     for _, child in tree:iter_nodes() do
       local data = child:data()
-      if data.is_class then
-        if data.framework == "xunit" then
-          table.insert(filter, "FullyQualifiedName~" .. data.name)
-        elseif data.framework == "nunit" then
-          table.insert(filter, "Name~" .. data.name)
-        end
+      if data.type == "test" then
+        table.insert(fqns, BuildSpecUtils.build_test_fqn(data.running_id or data.id))
       end
     end
 
-    if #filter > 0 then
-      local spec = BuildSpecUtils.create_single_spec(
-        position,
-        proj_root,
-        '--filter "' .. table.concat(filter, "|") .. '"',
-        dotnet_additional_args
-      )
-      table.insert(specs, spec)
+    local filter = ""
+    if #fqns > 0 then
+      local parts = {}
+      for _, fqn in ipairs(fqns) do
+        table.insert(parts, 'FullyQualifiedName~"' .. fqn .. '"')
+      end
+      filter = "--filter " .. table.concat(parts, "|")
     end
+
+    table.insert(specs, BuildSpecUtils.create_single_spec(position, proj_root, filter, dotnet_additional_args))
   end
 
   return #specs < 0 and nil or specs

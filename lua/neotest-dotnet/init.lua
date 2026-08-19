@@ -3,6 +3,13 @@ local logger = require("neotest.logging")
 local FrameworkDiscovery = require("neotest-dotnet.framework-discovery")
 local build_spec_utils = require("neotest-dotnet.utils.build-spec-utils")
 
+-- nvim-treesitter normally registers this filetype<->language alias, but
+-- neotest's background parser subprocess is spawned with `-u NONE` (no
+-- plugins), so it never runs there. Without it, parsing a .cs file's
+-- content in that subprocess fails with "No parser for language 'cs'"
+-- (the parser is compiled/registered as "c_sharp", not "cs").
+pcall(vim.treesitter.language.register, "c_sharp", "cs")
+
 local DotnetNeotestAdapter = { name = "neotest-dotnet" }
 local dap = { adapter_name = "netcoredbg" }
 local custom_attribute_args

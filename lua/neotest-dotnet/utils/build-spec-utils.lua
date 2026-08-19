@@ -127,7 +127,11 @@ function BuildSpecUtils.create_specs(tree, specs, dotnet_additional_args)
       for _, fqn in ipairs(fqns) do
         table.insert(parts, 'FullyQualifiedName~"' .. fqn .. '"')
       end
-      filter = "--filter " .. table.concat(parts, "|")
+      -- create_single_spec joins the whole command into one shell string, so
+      -- the `|` separator must be shell-quoted here or the shell splits it
+      -- into piped commands (each fqn after the first fails as "command not
+      -- found"). Single quotes are safe since fqns can't contain one.
+      filter = "--filter '" .. table.concat(parts, "|") .. "'"
     end
 
     table.insert(specs, BuildSpecUtils.create_single_spec(position, proj_root, filter, dotnet_additional_args))

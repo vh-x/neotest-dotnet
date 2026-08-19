@@ -125,7 +125,13 @@ function BuildSpecUtils.create_specs(tree, specs, dotnet_additional_args)
     if #fqns > 0 then
       local parts = {}
       for _, fqn in ipairs(fqns) do
-        table.insert(parts, 'FullyQualifiedName~"' .. fqn .. '"')
+        -- No per-fqn quotes: fqns are plain Namespace.Class.Method (no
+        -- spaces -- build_test_fqn already stripped parameters), and
+        -- embedding "..." here breaks dotnet's own arg parsing once
+        -- multiple quoted segments are OR'd together (MSB4177 "Invalid
+        -- property"). The single-fqn case elsewhere in this file needs
+        -- quotes only because that value stands alone with no `|`.
+        table.insert(parts, "FullyQualifiedName~" .. fqn)
       end
       -- create_single_spec joins the whole command into one shell string, so
       -- the `|` separator must be shell-quoted here or the shell splits it

@@ -3,6 +3,35 @@ local logger = require("neotest.logging")
 local FrameworkDiscovery = require("neotest-dotnet.framework-discovery")
 local build_spec_utils = require("neotest-dotnet.utils.build-spec-utils")
 
+-- nvim-treesitter normally registers the c_sharp/cs language alias, but
+-- neotest's background parser subprocess is spawned with `-u NONE` so it
+-- never runs there -- without it, parsing a .cs file's content in that
+-- subprocess fails with "No parser for language 'cs'".
+--
+-- This module gets require()'d in TWO separate Lua states: the main nvim
+-- process, and (later) fresh inside the subprocess, when neotest core's
+-- `loadstring(opts.build_position)()` runs there for the first time -- a
+-- fast RPC-callback context, *before* neotest's own nio.scheduler() yield
+-- later in the same call chain. Directly calling
+-- vim.treesitter.language.register() here would run in that fast context
+-- and lazily load vim.treesitter.query, whose top-level code registers an
+-- augroup -- forbidden from a fast context (E5560).
+--
+-- Patching subprocess.add_paths_to_rtp instead is safe in both states:
+-- patching is just a table field assignment (no API calls). The patched
+-- function only ever actually gets *invoked* from the main process --
+-- that's the only place neotest.lib.subprocess.init() calls it, right
+-- after spawning the child -- so the copy that gets defined when this
+-- module loads inside the subprocess itself just sits there unused.
+do
+  local subprocess = require("neotest.lib.subprocess")
+  local orig_add_paths_to_rtp = subprocess.add_paths_to_rtp
+  subprocess.add_paths_to_rtp = function(paths)
+    orig_add_paths_to_rtp(paths)
+    subprocess.request("nvim_exec_lua", "vim.treesitter.language.register('c_sharp', 'cs')", {})
+  end
+end
+
 local DotnetNeotestAdapter = { name = "neotest-dotnet" }
 local dap = { adapter_name = "netcoredbg" }
 local custom_attribute_args
